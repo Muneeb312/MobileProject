@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // for Clipboard (Share Result)
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart' show rootBundle, Clipboard, ClipboardData;
+import 'dart:math';
+
 
 void main() {
   runApp(const WordleApp());
@@ -68,16 +70,94 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
+      appBar: AppBar(title: const Text('Home')),
       body: Center(
-        child: Text(
-          'WORDLE!',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'WORDLE CLONE',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // --- Wordle button ---
+              ElevatedButton.icon(
+                icon: const Icon(Icons.videogame_asset),
+                label: const Text('Wordle'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(220, 50),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+                onPressed: () {
+                  // If you want this to switch to the Game tab, you can lift state
+                  // or use a global key / router. For now, it just shows a snackbar.
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Wordle')),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // --- Placeholder buttons for other games ---
+              ElevatedButton.icon(
+                icon: const Icon(Icons.man),
+                label: const Text('Hangman'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(220, 50),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Hangman coming soon!')),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+
+              ElevatedButton.icon(
+                icon: const Icon(Icons.abc),
+                label: const Text('Crossword'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(220, 50),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Crossword coming soon!')),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+
+              ElevatedButton.icon(
+                icon: const Icon(Icons.grid_4x4),
+                label: const Text('Sudoku'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(220, 50),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Sudoku coming soon!')),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
 
 // -------------------- WORDLE CORE --------------------
 enum LetterState { correct, present, absent }
@@ -124,19 +204,46 @@ List<LetterMark> scoreGuess(String guess, String answer) {
   return res;
 }
 
-// A tiny built-in list. Replace with a larger curated list when ready.
-const List<String> _wordList = [
-  'APPLE','GRAPE','MANGO','BERRY','LEMON','PEACH','OLIVE','GUAVA','MELON','CHILI',
-  'PEARL','COCOA','HONEY','BASIL','MINTY','COAST','RIVER','STONE','CLOUD','STORM',
-];
-final Set<String> _valid = {..._wordList}; // allow only these for now
-
-String _dailyWord(DateTime now) {
-  final start = DateTime(2021, 6, 19);
-  final days = now.difference(start).inDays;
-  final idx = days % _wordList.length;
-  return _wordList[idx];
+// Load all words from assets
+Future<List<String>> loadWordList() async {
+  final rawData = await rootBundle.loadString('assets/words.txt');
+  final words = rawData
+      .split(RegExp(r'[\s,]+'))
+      .map((w) => w.trim())
+      .where((w) => w.isNotEmpty)
+      .map((w) => w.toUpperCase())
+      .toList();
+  return words;
 }
+
+// Random word (for testing or debug)
+String getRandomWord(List<String> words) {
+  final random = Random();
+  return words[random.nextInt(words.length)];
+}
+
+// Daily deterministic word
+String getDailyWord(List<String> words, DateTime now) {
+  if (words.isEmpty) return 'APPLE';
+  final start = DateTime(2021, 6, 19); // reference date
+  final days = now.difference(start).inDays;
+  final idx = days % words.length; // cycles through the list
+  return words[idx];
+
+}
+// // A tiny built-in list. Replace with a larger curated list when ready.
+// const List<String> _wordList = [
+//   'APPLE','GRAPE','MANGO','BERRY','LEMON','PEACH','OLIVE','GUAVA','MELON','CHILI',
+//   'PEARL','COCOA','HONEY','BASIL','MINTY','COAST','RIVER','STONE','CLOUD','STORM',
+// ];
+// final Set<String> _valid = {..._wordList}; // allow only these for now
+//
+// String _dailyWord(DateTime now) {
+//   final start = DateTime(2021, 6, 19);
+//   final days = now.difference(start).inDays;
+//   final idx = days % _wordList.length;
+//   return _wordList[idx];
+// }
 
 // -------------------- GAME SCREEN --------------------
 class GameScreen extends StatefulWidget {
@@ -146,13 +253,17 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
-  late String _word;
+  String _word = '';
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focus = FocusNode();
 
   final List<String> _guesses = [];
   final List<List<LetterMark>> _marks = [];
   final Map<String, LetterState> _kb = {}; // A..Z -> best-known state
+
+  // store words & valid set in state so other methods can use them
+  List<String> _words = [];
+  Set<String> _valid = {};
 
   late SharedPreferences _prefs;
   int _wins = 0, _losses = 0, _streak = 0, _maxStreak = 0;
@@ -161,8 +272,20 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
-    _word = _dailyWord(DateTime.now());
+    _loadGameData();
+  }
+
+  void _loadGameData() async {
+    final words = await loadWordList();
+    if (!mounted) return;
+    setState(() {
+      _words = words;
+      _valid = {...words};
+      _word = getDailyWord(_words, DateTime.now());
+    });
+    debugPrint(_word);
     _loadStats();
+
   }
 
   @override
@@ -192,7 +315,12 @@ class _GameScreenState extends State<GameScreen> {
 
   void _newGame() {
     setState(() {
-      _word = _dailyWord(DateTime.now());
+      if (_words.isNotEmpty) {
+        // use today's word again, or pick a random one for local 'New Game'
+        _word = getDailyWord(_words, DateTime.now());
+      } else {
+        _word = 'APPLE';
+      }
       _guesses.clear();
       _marks.clear();
       _kb.clear();
@@ -248,7 +376,8 @@ class _GameScreenState extends State<GameScreen> {
       _toast('Already guessed');
       return;
     }
-    if (!_valid.contains(raw)) {
+    // only block if we have a loaded valid list
+    if (_valid.isNotEmpty && !_valid.contains(raw)) {
       _toast('Not in word list');
       return;
     }
@@ -472,7 +601,7 @@ class _GameScreenState extends State<GameScreen> {
     final guessesLeft = 6 - _guesses.length;
     return Scaffold(
       appBar: AppBar(
-        title: Text('Wordle Game · $guessesLeft left'),
+        title: Text('Wordle · $guessesLeft guesses remaining'),
         actions: [
           IconButton(
             tooltip: 'New Game',
@@ -575,7 +704,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(child: Text('Settings Placeholder')),
+      body: Center(child: Text('Settings')),
     );
   }
 }
