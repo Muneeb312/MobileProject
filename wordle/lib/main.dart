@@ -278,14 +278,18 @@ class _GameScreenState extends State<GameScreen> {
   void _loadGameData() async {
     final words = await loadWordList();
     if (!mounted) return;
+
     setState(() {
       _words = words;
       _valid = {...words};
-      _word = getDailyWord(_words, DateTime.now());
+      // Pick a random word on launch
+      _word = getRandomWord(_words);
     });
-    debugPrint(_word);
-    _loadStats();
 
+    // Optional: comment out in release to avoid leaking the word
+    // debugPrint(_word);
+
+    _loadStats();
   }
 
   @override
@@ -316,8 +320,14 @@ class _GameScreenState extends State<GameScreen> {
   void _newGame() {
     setState(() {
       if (_words.isNotEmpty) {
-        // use today's word again, or pick a random one for local 'New Game'
-        _word = getDailyWord(_words, DateTime.now());
+        // Random every time; avoid repeating the immediate previous word
+        String next = getRandomWord(_words);
+        if (_word.isNotEmpty && _words.length > 1) {
+          while (next == _word) {
+            next = getRandomWord(_words);
+          }
+        }
+        _word = next;
       } else {
         _word = 'APPLE';
       }
