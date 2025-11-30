@@ -23,17 +23,8 @@ class WordleApp extends StatelessWidget {
     );
   }
 }
-class HangmanScreen extends StatelessWidget {
-  const HangmanScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Hangman')),
-      body: const Center(child: Text('Hangman Game Placeholder')),
-    );
-  }
-}
+
 
 class CrosswordScreen extends StatelessWidget {
   const CrosswordScreen({super.key});
@@ -699,6 +690,149 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
+class HangmanScreen extends StatefulWidget {
+  const HangmanScreen({super.key});
+
+  @override
+  State<HangmanScreen> createState() => _HangmanScreenState();
+}
+
+class _HangmanScreenState extends State<HangmanScreen> {
+  late String secretWord;
+  List<String> lettersGuessed = [];
+  int maxAttempts = 6;
+
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRandomWord();
+  }
+
+  Future<void> _loadRandomWord() async {
+    String fileText = await rootBundle.loadString("assets/words.txt");
+    List<String> allWords = fileText
+        .split('\n')
+        .map((e) => e.trim().toUpperCase())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    setState(() {
+      secretWord = (allWords..shuffle()).first;
+      isLoading = false;
+    });
+  }
+
+  void guessLetter(String letter) {
+    if (lettersGuessed.contains(letter)) return;
+
+    setState(() {
+      lettersGuessed.add(letter);
+    });
+
+    if (isWordGuessed()) {
+      _showEndDialog("🎉 You Won!", "The word was: $secretWord");
+    } else if (wrongGuesses() >= maxAttempts) {
+      _showEndDialog("❌ You Lost!", "The word was: $secretWord");
+    }
+  }
+
+  int wrongGuesses() {
+    return lettersGuessed.where((l) => !secretWord.contains(l)).length;
+  }
+
+  bool isWordGuessed() {
+    return secretWord.split("").every((c) => lettersGuessed.contains(c));
+  }
+
+  void _showEndDialog(String title, String msg) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(msg),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                lettersGuessed.clear();
+                isLoading = true;
+              });
+              _loadRandomWord();
+            },
+            child: const Text("Play Again"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildLetterButton(String letter) {
+    bool used = lettersGuessed.contains(letter);
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: ElevatedButton(
+        onPressed: used ? null : () => guessLetter(letter),
+        child: Text(letter),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    String displayWord = secretWord
+        .split('')
+        .map((c) => lettersGuessed.contains(c) ? c : "_")
+        .join(" ");
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Hangman"),
+        backgroundColor: Colors.blueGrey,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            Text(
+              "Word:",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              displayWord,
+              style: const TextStyle(fontSize: 32, letterSpacing: 4),
+            ),
+            const SizedBox(height: 20),
+
+            Text("Wrong guesses: ${wrongGuesses()} / $maxAttempts",
+                style: Theme.of(context).textTheme.titleMedium),
+
+            const SizedBox(height: 20),
+
+            // LETTER BUTTON GRID
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 7,
+                children: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    .split('')
+                    .map(buildLetterButton)
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // -------------------- STATS SCREEN --------------------
 class StatsScreen extends StatefulWidget {
