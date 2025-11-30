@@ -23,6 +23,41 @@ class WordleApp extends StatelessWidget {
     );
   }
 }
+class HangmanScreen extends StatelessWidget {
+  const HangmanScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Hangman')),
+      body: const Center(child: Text('Hangman Game Placeholder')),
+    );
+  }
+}
+
+class CrosswordScreen extends StatelessWidget {
+  const CrosswordScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Crossword')),
+      body: const Center(child: Text('Crossword Game Placeholder')),
+    );
+  }
+}
+
+class SudokuScreen extends StatelessWidget {
+  const SudokuScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sudoku')),
+      body: const Center(child: Text('Sudoku Game Placeholder')),
+    );
+  }
+}
 
 // -------------------- MAIN NAVIGATION WRAPPER --------------------
 class MainNavigation extends StatefulWidget {
@@ -97,12 +132,12 @@ class HomeScreen extends StatelessWidget {
                   textStyle: const TextStyle(fontSize: 18),
                 ),
                 onPressed: () {
-                  // If you want this to switch to the Game tab, you can lift state
-                  // or use a global key / router. For now, it just shows a snackbar.
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Wordle')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const GameScreen()),
                   );
                 },
+
               ),
               const SizedBox(height: 24),
 
@@ -115,10 +150,12 @@ class HomeScreen extends StatelessWidget {
                   textStyle: const TextStyle(fontSize: 18),
                 ),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Hangman coming soon!')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HangmanScreen()),
                   );
                 },
+
               ),
               const SizedBox(height: 16),
 
@@ -130,10 +167,12 @@ class HomeScreen extends StatelessWidget {
                   textStyle: const TextStyle(fontSize: 18),
                 ),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Crossword coming soon!')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CrosswordScreen()),
                   );
                 },
+
               ),
               const SizedBox(height: 16),
 
@@ -145,10 +184,12 @@ class HomeScreen extends StatelessWidget {
                   textStyle: const TextStyle(fontSize: 18),
                 ),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Sudoku coming soon!')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SudokuScreen()),
                   );
                 },
+
               ),
             ],
           ),
@@ -657,6 +698,7 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 }
+
 
 // -------------------- STATS SCREEN --------------------
 class StatsScreen extends StatefulWidget {
