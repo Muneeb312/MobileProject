@@ -1,180 +1,63 @@
 // ------------------------------------------------------------
-// FILE: game_screen.dart
+// FILE: duordle_screen.dart
 // PURPOSE:
-//   Core Wordle gameplay screen. Contains Wordle scoring logic,
-//   HTTP-based word fetching, local word list loading, keyboard
-//   state tracking, statistics handling, and the main Wordle UI.
+//   Implements a "Duordle" game mode: two Wordle-style boards
+//   played in parallel. A single guess is applied to both target
+//   words, with separate boards and evaluations.
+//
+// DEPENDS ON:
+//   game_screen.dart for LetterState, LetterMark, scoreGuess,
+//   loadWordList, fetchRandomWordFromApi, and getRandomWord.
 // ------------------------------------------------------------
 
-import 'dart:math';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData, rootBundle;
 
-// ------------------------------------------------------------
-// WORDLE LOGIC
-// ------------------------------------------------------------
+// Reuse Wordle logic and helpers from the main game screen.
+import 'game_screen.dart';
 
-enum LetterState { correct, present, absent }
-
-class LetterMark {
-  final String char;
-  final LetterState state;
-  const LetterMark(this.char, this.state);
-}
-
-List<LetterMark> scoreGuess(String guess, String answer) {
-  guess = guess.toUpperCase();
-  answer = answer.toUpperCase();
-
-  final res = List<LetterMark>.filled(
-    5,
-    const LetterMark('', LetterState.absent),
-    growable: false,
-  );
-
-  final answerChars = answer.split('');
-  final used = List<bool>.filled(5, false);
-
-  // Greens.
-  for (int i = 0; i < 5; i++) {
-    if (guess[i] == answer[i]) {
-      res[i] = LetterMark(guess[i], LetterState.correct);
-      used[i] = true;
-    }
-  }
-
-  // Yellows / Greys.
-  for (int i = 0; i < 5; i++) {
-    if (res[i].state == LetterState.correct) continue;
-    final g = guess[i];
-    int idx = -1;
-
-    for (int j = 0; j < 5; j++) {
-      if (!used[j] && answerChars[j] == g) {
-        idx = j;
-        break;
-      }
-    }
-
-    if (idx != -1) {
-      used[idx] = true;
-      res[i] = LetterMark(g, LetterState.present);
-    } else {
-      res[i] = LetterMark(g, LetterState.absent);
-    }
-  }
-  return res;
-}
-
-Future<List<String>> loadWordList() async {
-  final raw = await rootBundle.loadString('assets/words.txt');
-  return raw
-      .split(RegExp(r'[\s,]+'))
-      .map((w) => w.trim().toUpperCase())
-      .where((w) => w.isNotEmpty)
-      .toList();
-}
-
-String getRandomWord(List<String> words) {
-  if (words.isEmpty) return "HELLO"; // Fallback safety.
-  final r = Random();
-  return words[r.nextInt(words.length)];
-}
-
-// ------------------------------------------------------------
-// HTTP SERVICE
-// ------------------------------------------------------------
-
-Future<String?> fetchRandomWordFromApi() async {
-  try {
-    // Request a 5-letter word specifically.
-    final uri =
-    Uri.parse('https://random-word-api.herokuapp.com/word?length=5');
-    final response = await http.get(uri);
-
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      if (data.isNotEmpty) {
-        return data[0].toString().toUpperCase();
-      }
-    }
-  } catch (e) {
-    debugPrint("HTTP Error: $e");
-  }
-  return null; // Return null if offline or error.
-}
-
-// ------------------------------------------------------------
-// WORDLE GAME SCREEN
-// ------------------------------------------------------------
-
-class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
+class DuordleScreen extends StatefulWidget {
+  const DuordleScreen({super.key});
 
   @override
-  State<GameScreen> createState() => _GameScreenState();
+  State<DuordleScreen> createState() => _DuordleScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _DuordleScreenState extends State<DuordleScreen> {
   // ------------------------------------------------------------
-  // GAME STATE AND LIFECYCLE
+  // GAME STATE
   // ------------------------------------------------------------
 
-  String _word = '';
-  final _controller = TextEditingController();
-  final _focus = FocusNode();
+  // Two target words for the left and right boards.
+  String _wordLeft = '';
+  String _wordRight = '';
+
+  // Shared guess input, separate marks for each board.
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focus = FocusNode();
 
   List<String> _guesses = [];
-  List<List<LetterMark>> _marks = [];
+  List<List<LetterMark>> _marksLeft = [];
+  List<List<LetterMark>> _marksRight = [];
   Map<String, LetterState> _kb = {};
 
+  // Dictionary and validation set.
   List<String> _words = [];
   Set<String> _valid = {};
 
-  late SharedPreferences _prefs;
-  int _wins = 0, _losses = 0, _streak = 0, _maxStreak = 0;
-  bool _gameOver = false;
+  // Flags for loading and game status.
   bool _isLoading = true;
+  bool _gameOver = false;
+  bool _leftSolved = false;
+  bool _rightSolved = false;
+
+  // ------------------------------------------------------------
+  // LIFECYCLE
+  // ------------------------------------------------------------
 
   @override
   void initState() {
     super.initState();
     _loadGameData();
-  }
-
-  void _loadGameData() async {
-    setState(() => _isLoading = true);
-
-    // 1. Load local dictionary (needed for validation).
-    final words = await loadWordList();
-
-    // 2. Attempt to fetch target word via HTTP.
-    final apiWord = await fetchRandomWordFromApi();
-
-    if (!mounted) return;
-
-    setState(() {
-      _words = words;
-      _valid = {...words};
-
-      if (apiWord != null) {
-        _word = apiWord;
-        // If API returns a word not in our local list,
-        // add it to _valid so validation does not reject it.
-        _valid.add(_word);
-        _toast("Word fetched from Internet!");
-      } else {
-        // Fallback to local if offline.
-        _word = getRandomWord(_words);
-      }
-      _isLoading = false;
-    });
-
-    _loadStats();
   }
 
   @override
@@ -184,58 +67,69 @@ class _GameScreenState extends State<GameScreen> {
     super.dispose();
   }
 
-  Future<void> _loadStats() async {
-    _prefs = await SharedPreferences.getInstance();
+  // ------------------------------------------------------------
+  // GAME INITIALIZATION / WORD SELECTION
+  // ------------------------------------------------------------
+
+  Future<void> _loadGameData() async {
+    setState(() => _isLoading = true);
+
+    // 1. Load local dictionary.
+    final words = await loadWordList();
+    _words = words;
+    _valid = {...words};
+
+    // 2. Pick two answers, trying HTTP first, then falling back to local.
+    final left = await _randomAnswer();
+    final right = await _randomAnswer(exclude: left);
+
     if (!mounted) return;
 
     setState(() {
-      _wins = _prefs.getInt('wins') ?? 0;
-      _losses = _prefs.getInt('losses') ?? 0;
-      _streak = _prefs.getInt('streak') ?? 0;
-      _maxStreak = _prefs.getInt('maxStreak') ?? 0;
-    });
-  }
+      _wordLeft = left;
+      _wordRight = right;
+      _valid.add(_wordLeft);
+      _valid.add(_wordRight);
 
-  Future<void> _saveStats() async {
-    await _prefs.setInt('wins', _wins);
-    await _prefs.setInt('losses', _losses);
-    await _prefs.setInt('streak', _streak);
-    await _prefs.setInt('maxStreak', _maxStreak);
-  }
-
-  // Start a new game, using HTTP if possible.
-  Future<void> _newGame() async {
-    setState(() {
-      _isLoading = true;
+      _isLoading = false;
       _guesses = [];
-      _marks = [];
+      _marksLeft = [];
+      _marksRight = [];
       _kb = {};
       _gameOver = false;
+      _leftSolved = false;
+      _rightSolved = false;
       _controller.clear();
     });
+  }
 
-    // Attempt HTTP fetch.
-    String? next = await fetchRandomWordFromApi();
+  Future<String> _randomAnswer({String? exclude}) async {
+    // Try API first.
+    String? apiWord = await fetchRandomWordFromApi();
+    String chosen;
 
-    if (next == null) {
-      // Fallback logic.
-      next = getRandomWord(_words);
-      if (_words.length > 1) {
-        while (next == _word) {
-          next = getRandomWord(_words);
-        }
-      }
+    if (apiWord != null &&
+        apiWord.length == 5 &&
+        RegExp(r'^[A-Z]+$').hasMatch(apiWord)) {
+      chosen = apiWord.toUpperCase();
     } else {
-      // Ensure API word is considered valid.
-      _valid.add(next);
+      // Fallback to local random word.
+      chosen = getRandomWord(_words);
     }
 
-    if (!mounted) return;
+    // Ensure distinct words if an exclude word is provided.
+    if (exclude != null && chosen == exclude && _words.length > 1) {
+      String alt = getRandomWord(_words);
+      int safety = 0;
+      while (alt == exclude && safety < 20) {
+        alt = getRandomWord(_words);
+        safety++;
+      }
+      chosen = alt;
+    }
 
-    setState(() {
-      _word = next!;
-      _isLoading = false;
-    });
+    _valid.add(chosen);
+    return chosen;
   }
 
   // ------------------------------------------------------------
@@ -243,7 +137,7 @@ class _GameScreenState extends State<GameScreen> {
   // ------------------------------------------------------------
 
   void _updateKeyboard(List<LetterMark> marks) {
-    int p(LetterState s) {
+    int rank(LetterState s) {
       if (s == LetterState.correct) return 3;
       if (s == LetterState.present) return 2;
       return 1;
@@ -251,30 +145,15 @@ class _GameScreenState extends State<GameScreen> {
 
     for (final m in marks) {
       final prev = _kb[m.char];
-      if (prev == null || p(m.state) > p(prev)) {
+      if (prev == null || rank(m.state) > rank(prev)) {
         _kb[m.char] = m.state;
       }
     }
   }
 
-  void _endGame({required bool won}) async {
+  void _submitGuess() {
     if (_gameOver) return;
 
-    _gameOver = true;
-    if (won) {
-      _wins++;
-      _streak++;
-      if (_streak > _maxStreak) _maxStreak = _streak;
-    } else {
-      _losses++;
-      _streak = 0;
-    }
-
-    await _saveStats();
-    _showEndDialog(won ? "You won!" : "Try again!");
-  }
-
-  void _submitGuess() {
     final g = _controller.text.trim().toUpperCase();
     if (!RegExp(r'^[A-Z]{5}$').hasMatch(g)) {
       _toast("Enter 5 letters");
@@ -289,15 +168,21 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
 
-    final marks = scoreGuess(g, _word);
+    final marksL = scoreGuess(g, _wordLeft);
+    final marksR = scoreGuess(g, _wordRight);
 
     setState(() {
       _guesses.add(g);
-      _marks.add(marks);
-      _updateKeyboard(marks);
+      _marksLeft.add(marksL);
+      _marksRight.add(marksR);
+      _updateKeyboard(marksL);
+      _updateKeyboard(marksR);
     });
 
-    if (g == _word) {
+    if (g == _wordLeft) _leftSolved = true;
+    if (g == _wordRight) _rightSolved = true;
+
+    if (_leftSolved && _rightSolved) {
       _endGame(won: true);
     } else if (_guesses.length >= 6) {
       _endGame(won: false);
@@ -307,8 +192,14 @@ class _GameScreenState extends State<GameScreen> {
     _focus.requestFocus();
   }
 
+  void _endGame({required bool won}) {
+    if (_gameOver) return;
+    _gameOver = true;
+    _showEndDialog(won ? "You solved both!" : "Out of guesses!");
+  }
+
   // ------------------------------------------------------------
-  // UI HELPERS
+  // UI HELPERS (TOASTS, TILES, BOARDS, KEYBOARD)
   // ------------------------------------------------------------
 
   void _toast(String msg) {
@@ -333,35 +224,32 @@ class _GameScreenState extends State<GameScreen> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
-      width: 54,
-      height: 54,
-      margin: const EdgeInsets.all(4),
+      width: 40,
+      height: 40,
+      margin: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: isEmpty ? Colors.transparent : _tileColor(s),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.grey.shade400),
       ),
       alignment: Alignment.center,
       child: Text(
         ch,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
       ),
     );
   }
 
-  Widget _board() {
+  Widget _board(List<List<LetterMark>> marks) {
     List<Widget> buildRow(int r) {
-      if (r < _marks.length) {
-        return _marks[r].map((m) => _tile(m.char, m.state)).toList();
+      if (r < marks.length) {
+        return marks[r].map((m) => _tile(m.char, m.state)).toList();
       }
 
-      if (r == _marks.length && _guesses.length < 6) {
+      if (r == marks.length && _guesses.length < 6) {
         final txt = _controller.text.toUpperCase();
         return List.generate(5, (i) {
-          return _tile(
-            i < txt.length ? txt[i] : "",
-            LetterState.absent,
-          );
+          return _tile(i < txt.length ? txt[i] : "", LetterState.absent);
         });
       }
 
@@ -391,7 +279,7 @@ class _GameScreenState extends State<GameScreen> {
 
     Widget key(String ch) {
       return Padding(
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(3),
         child: InkWell(
           onTap: _gameOver || _controller.text.length >= 5
               ? null
@@ -403,8 +291,8 @@ class _GameScreenState extends State<GameScreen> {
             setState(() {});
           },
           child: Container(
-            width: 34,
-            height: 44,
+            width: 30,
+            height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: keyColor(_kb[ch]),
@@ -458,15 +346,13 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   // ------------------------------------------------------------
-  // END OF GAME DIALOG
+  // END-OF-GAME DIALOG
   // ------------------------------------------------------------
 
   void _showEndDialog(String message) {
-    final won = _guesses.isNotEmpty && _guesses.last == _word;
-
-    String emojiGrid() {
+    String emojiBoard(List<List<LetterMark>> marks) {
       final b = StringBuffer();
-      for (final row in _marks) {
+      for (final row in marks) {
         for (final m in row) {
           if (m.state == LetterState.correct) {
             b.write("🟩");
@@ -481,30 +367,23 @@ class _GameScreenState extends State<GameScreen> {
       return b.toString();
     }
 
+    final gridLeft = emojiBoard(_marksLeft);
+    final gridRight = emojiBoard(_marksRight);
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: Text(message),
-        content: !won ? Text("Answer: $_word") : null,
+        content: Text(
+          "Left:  $_wordLeft\nRight: $_wordRight\n\n"
+              "Left board:\n$gridLeft\nRight board:\n$gridRight",
+        ),
         actions: [
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(
-                ClipboardData(text: emojiGrid()),
-              );
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Result copied!")),
-                );
-              }
-            },
-            child: const Text("Share"),
-          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _newGame();
+              _loadGameData();
             },
             child: const Text("Play Again"),
           ),
@@ -523,11 +402,11 @@ class _GameScreenState extends State<GameScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Wordle · $guessesLeft guesses"),
+        title: Text("Duordle · $guessesLeft guesses"),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _newGame,
+            onPressed: _loadGameData,
           ),
         ],
       ),
@@ -540,7 +419,46 @@ class _GameScreenState extends State<GameScreen> {
           child: Center(
             child: Column(
               children: [
-                _board(),
+                // Two boards side-by-side on wide screens, stacked on narrow.
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth > 600) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Column(
+                            children: [
+                              const Text("Left"),
+                              const SizedBox(height: 8),
+                              _board(_marksLeft),
+                            ],
+                          ),
+                          const SizedBox(width: 24),
+                          Column(
+                            children: [
+                              const Text("Right"),
+                              const SizedBox(height: 8),
+                              _board(_marksRight),
+                            ],
+                          ),
+                        ],
+                      );
+                    } else {
+                      return Column(
+                        children: [
+                          const Text("Left"),
+                          const SizedBox(height: 8),
+                          _board(_marksLeft),
+                          const SizedBox(height: 16),
+                          const Text("Right"),
+                          const SizedBox(height: 8),
+                          _board(_marksRight),
+                        ],
+                      );
+                    }
+                  },
+                ),
                 const SizedBox(height: 16),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 360),
@@ -557,10 +475,9 @@ class _GameScreenState extends State<GameScreen> {
                         }
                         ) =>
                     null,
-                    textCapitalization:
-                    TextCapitalization.characters,
+                    textCapitalization: TextCapitalization.characters,
                     decoration: InputDecoration(
-                      labelText: "Enter your guess",
+                      labelText: "Enter a guess (applies to both)",
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.check),
                         onPressed:

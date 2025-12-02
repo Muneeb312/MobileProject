@@ -1,3 +1,13 @@
+// ------------------------------------------------------------
+// FILE: sudoku_screen.dart
+// PURPOSE:
+//   Simple 9×9 Sudoku screen with one base puzzle/solution.
+//   Supports clearing the current board and generating a
+//   randomized variant of the base puzzle using digit
+//   permutations.
+// ------------------------------------------------------------
+
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 class SudokuScreen extends StatefulWidget {
@@ -8,8 +18,8 @@ class SudokuScreen extends StatefulWidget {
 }
 
 class _SudokuScreenState extends State<SudokuScreen> {
-  // 0 = empty; other numbers are givens.
-  final List<List<int>> _puzzle = [
+  // Base puzzle (0 = empty; other numbers are givens).
+  static const List<List<int>> _basePuzzle = [
     [5, 3, 0, 0, 7, 0, 0, 0, 0],
     [6, 0, 0, 1, 9, 5, 0, 0, 0],
     [0, 9, 8, 0, 0, 0, 0, 6, 0],
@@ -21,7 +31,8 @@ class _SudokuScreenState extends State<SudokuScreen> {
     [0, 0, 0, 0, 8, 0, 0, 7, 9],
   ];
 
-  final List<List<int>> _solution = [
+  // Base solved grid for the puzzle above.
+  static const List<List<int>> _baseSolution = [
     [5, 3, 4, 6, 7, 8, 9, 1, 2],
     [6, 7, 2, 1, 9, 5, 3, 4, 8],
     [1, 9, 8, 3, 4, 2, 5, 6, 7],
@@ -33,22 +44,66 @@ class _SudokuScreenState extends State<SudokuScreen> {
     [3, 4, 5, 2, 8, 6, 1, 7, 9],
   ];
 
+  // Current active puzzle and solution, after randomization.
+  late List<List<int>> _puzzle;
+  late List<List<int>> _solution;
   late List<List<int>> _current;
 
   @override
   void initState() {
     super.initState();
-    _current = _copyBoard(_puzzle);
+    _createRandomBoard();
   }
+
+  // ------------------------------------------------------------
+  // BOARD GENERATION AND HELPERS
+  // ------------------------------------------------------------
 
   List<List<int>> _copyBoard(List<List<int>> src) =>
       List.generate(9, (r) => List<int>.from(src[r]));
+
+  // Create a randomized puzzle/solution by permuting digits 1–9.
+  void _createRandomBoard() {
+    final rand = Random();
+
+    // Generate a random permutation of digits 1..9.
+    final digits = List<int>.generate(9, (i) => i + 1)..shuffle(rand);
+    final Map<int, int> digitMap = {
+      for (int d = 1; d <= 9; d++) d: digits[d - 1],
+    };
+
+    // Apply digit mapping to base puzzle and base solution.
+    final newPuzzle = List.generate(9, (r) {
+      return List.generate(9, (c) {
+        final v = _basePuzzle[r][c];
+        if (v == 0) return 0;
+        return digitMap[v]!;
+      });
+    });
+
+    final newSolution = List.generate(9, (r) {
+      return List.generate(9, (c) {
+        final v = _baseSolution[r][c];
+        return digitMap[v]!;
+      });
+    });
+
+    _puzzle = newPuzzle;
+    _solution = newSolution;
+    _current = _copyBoard(_puzzle);
+  }
 
   bool _isGiven(int r, int c) => _puzzle[r][c] != 0;
 
   void _clearBoard() {
     setState(() {
       _current = _copyBoard(_puzzle);
+    });
+  }
+
+  void _randomizeBoard() {
+    setState(() {
+      _createRandomBoard();
     });
   }
 
@@ -67,6 +122,10 @@ class _SudokuScreenState extends State<SudokuScreen> {
       const SnackBar(content: Text('Sudoku solved! 🎉')),
     );
   }
+
+  // ------------------------------------------------------------
+  // BUILD
+  // ------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +190,8 @@ class _SudokuScreenState extends State<SudokuScreen> {
                                   _current[r][c] = 0;
                                 } else {
                                   final n = int.tryParse(text);
-                                  _current[r][c] = (n != null && n >= 1 && n <= 9)
+                                  _current[r][c] =
+                                  (n != null && n >= 1 && n <= 9)
                                       ? n
                                       : 0;
                                 }
@@ -146,6 +206,8 @@ class _SudokuScreenState extends State<SudokuScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // Action buttons: clear, check, randomize.
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -158,6 +220,11 @@ class _SudokuScreenState extends State<SudokuScreen> {
                   icon: const Icon(Icons.check),
                   label: const Text('Check'),
                   onPressed: () => _checkBoard(context),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.shuffle),
+                  label: const Text('Random'),
+                  onPressed: _randomizeBoard,
                 ),
               ],
             ),

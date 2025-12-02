@@ -1,26 +1,42 @@
+// ------------------------------------------------------------
+// FILE: main.dart
+// PURPOSE:
+//   Application entry point. Sets up app initialization,
+//   notification service (platform-dependent), and global routes
+//   for all screens.
+//
+// NOTE:
+//   NotificationService is not initialized on macOS, because it
+//   requires platform-specific configuration not supported there.
+// ------------------------------------------------------------
+
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+
 import 'screens/home_screen.dart';
 import 'screens/game_screen.dart';
 import 'screens/hangman_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/settings_screen.dart';
-import 'services/notification_service.dart';
-import 'screens/crossword_screen.dart';
+import 'screens/duordle_screen.dart';
 import 'screens/sudoku_screen.dart';
+
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   runApp(const WordleApp());
 
-  // Extra guard: don't init notifications on macOS
+  // Initialize notifications on supported platforms only.
   if (!Platform.isMacOS) {
     await NotificationService().init();
   }
-
-
 }
+
+// ------------------------------------------------------------
+// APP ROOT WIDGET
+// ------------------------------------------------------------
 
 class WordleApp extends StatelessWidget {
   const WordleApp({super.key});
@@ -40,7 +56,7 @@ class WordleApp extends StatelessWidget {
         '/hangman': (_) => const HangmanScreen(),
         '/stats': (_) => const StatsScreen(),
         '/settings': (_) => const SettingsScreen(),
-        '/crossword': (_) => const CrosswordScreen(),
+        '/duordle': (_) => const DuordleScreen(),
         '/sudoku': (_) => const SudokuScreen(),
       },
     );
