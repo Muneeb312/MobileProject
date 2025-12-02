@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:convert'; // Added for JSON decoding
+import 'package:http/http.dart' as http; // Added for HTTP requests
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -66,8 +68,31 @@ Future<List<String>> loadWordList() async {
 }
 
 String getRandomWord(List<String> words) {
+  if (words.isEmpty) return "HELLO"; // Fallback safety
   final r = Random();
   return words[r.nextInt(words.length)];
+}
+
+// ------------------------------------------------------------
+// HTTP SERVICE
+// ------------------------------------------------------------
+
+Future<String?> fetchRandomWordFromApi() async {
+  try {
+    // Request a 5-letter word specifically
+    final uri = Uri.parse('https://random-word-api.herokuapp.com/word?length=5');
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      if (data.isNotEmpty) {
+        return data[0].toString().toUpperCase();
+      }
+    }
+  } catch (e) {
+    debugPrint("HTTP Error: $e");
+  }
+  return null; // Return null if offline or error
 }
 
 // ------------------------------------------------------------
@@ -95,6 +120,7 @@ class _GameScreenState extends State<GameScreen> {
   late SharedPreferences _prefs;
   int _wins = 0, _losses = 0, _streak = 0, _maxStreak = 0;
   bool _gameOver = false;
+  bool _isLoading = true; // Added loading state for HTTP
 
   @override
   void initState() {
@@ -103,13 +129,31 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _loadGameData() async {
+    setState(() => _isLoading = true);
+
+    // 1. Load local dictionary (needed for validation)
     final words = await loadWordList();
+
+    // 2. Attempt to fetch target word via HTTP
+    final apiWord = await fetchRandomWordFromApi();
+
     if (!mounted) return;
 
     setState(() {
       _words = words;
       _valid = {...words};
-      _word = getRandomWord(_words);
+
+      if (apiWord != null) {
+        _word = apiWord;
+        // Important: If API returns a word not in our local list,
+        // add it to valid list so the game doesn't break.
+        _valid.add(_word);
+        _toast("Word fetched from Internet!");
+      } else {
+        // Fallback to local if offline
+        _word = getRandomWord(_words);
+      }
+      _isLoading = false;
     });
 
     _loadStats();
@@ -141,21 +185,38 @@ class _GameScreenState extends State<GameScreen> {
     await _prefs.setInt('maxStreak', _maxStreak);
   }
 
-  void _newGame() {
+  // Updated to be async for HTTP calls
+  Future<void> _newGame() async {
     setState(() {
-      String next = getRandomWord(_words);
-      if (_words.length > 1) {
-        while (next == _word) {
-          next = getRandomWord(_words);
-        }
-      }
-      _word = next;
-
+      _isLoading = true;
       _guesses = [];
       _marks = [];
       _kb = {};
       _gameOver = false;
       _controller.clear();
+    });
+
+    // Attempt HTTP fetch
+    String? next = await fetchRandomWordFromApi();
+
+    if (next == null) {
+      // Fallback logic
+      next = getRandomWord(_words);
+      if (_words.length > 1) {
+        while (next == _word) {
+          next = getRandomWord(_words);
+        }
+      }
+    } else {
+      // Ensure API word is considered valid
+      _valid.add(next);
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _word = next!;
+      _isLoading = false;
     });
   }
 
@@ -426,7 +487,10 @@ class _GameScreenState extends State<GameScreen> {
           ),
         ],
       ),
-      body: GestureDetector(
+      // Added Loading Indicator
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : GestureDetector(
         onTap: () => _focus.requestFocus(),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),

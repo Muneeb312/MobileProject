@@ -12,12 +12,14 @@ import 'screens/sudoku_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  runApp(const WordleApp());
+
   // Extra guard: don't init notifications on macOS
   if (!Platform.isMacOS) {
     await NotificationService().init();
   }
 
-  runApp(const WordleApp());
+
 }
 
 class WordleApp extends StatelessWidget {
