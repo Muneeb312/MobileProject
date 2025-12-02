@@ -1,16 +1,22 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'screens/home_screen.dart';
 import 'screens/game_screen.dart';
 import 'screens/hangman_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/notification_service.dart';
-
+import 'screens/crossword_screen.dart';
+import 'screens/sudoku_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService().init(); // init notifications
+
+  // Extra guard: don't init notifications on macOS
+  if (!Platform.isMacOS) {
+    await NotificationService().init();
+  }
+
   runApp(const WordleApp());
 }
 
@@ -32,6 +38,8 @@ class WordleApp extends StatelessWidget {
         '/hangman': (_) => const HangmanScreen(),
         '/stats': (_) => const StatsScreen(),
         '/settings': (_) => const SettingsScreen(),
+        '/crossword': (_) => const CrosswordScreen(),
+        '/sudoku': (_) => const SudokuScreen(),
       },
     );
   }

@@ -36,29 +36,24 @@ class HomeScreen extends StatelessWidget {
                 style: ElevatedButton.styleFrom(minimumSize: const Size(220, 50)),
                 onPressed: () => Navigator.pushNamed(context, '/hangman'),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.abc),
-                label: const Text('Crossword'),
-                style: ElevatedButton.styleFrom(minimumSize: const Size(220, 50)),
-                onPressed: () {
-                  // placeholder
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Crossword — coming soon!')),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.grid_4x4),
-                label: const Text('Sudoku'),
-                style: ElevatedButton.styleFrom(minimumSize: const Size(220, 50)),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Sudoku — coming soon!')),
-                  );
-                },
-              ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.abc),
+            label: const Text('Crossword'),
+            style: ElevatedButton.styleFrom(minimumSize: const Size(220, 50)),
+            onPressed: () {
+              Navigator.pushNamed(context, '/crossword');   // 👈 navigate to crossword
+            },
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.grid_4x4),
+            label: const Text('Sudoku'),
+            style: ElevatedButton.styleFrom(minimumSize: const Size(220, 50)),
+            onPressed: () {
+              Navigator.pushNamed(context, '/sudoku');      // 👈 navigate to sudoku
+            },
+          ),
               const SizedBox(height: 20),
               FilledButton.tonal(
                 onPressed: () {
